@@ -5,13 +5,23 @@
 #include "clock_config.h"
 #include "MK64F12.h"
 #include "fsl_debug_console.h"
-
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
 #include "nokiaLCD.h"
 #include "freertos_spi.h"
+#include "event_groups.h"
+
+#define alarm_sec		10u
+#define alarm_min		1u
+#define alarm_hour		2u
+#define bit_sec			(1 << 0)
+#define bit_min			(2 << 0)
+#define bit_hour		(3 << 0)
+#define init_sec		5u
+#define init_min		1u
+#define init_hour		2u
 
 
 //  Inicio
@@ -82,7 +92,6 @@ void taskLCDImg (void * args)
  }
 }
 
-// Aqui
 typedef struct
 {
 	uint8_t task;
@@ -125,6 +134,22 @@ typedef struct
 	QueueHandle_t minsend;
 }time_handler_t;
 
+typedef struct
+{
+	uint8_t alarm_seconds;
+	uint8_t alarm_minutes;
+	uint8_t alarm_hours;
+
+	uint8_t init_seconds;
+	uint8_t init_minutes;
+	uint8_t init_hours;
+
+	EventGroupHandle_t xEventGroup;
+
+	SemaphoreHandle_t Semaphore_minutes;
+	SemaphoreHandle_t Semaphore_hours;
+}set;
+
 static QueueHandle_t SPImailbox;
 SemaphoreHandle_t xSemaphore_minutes = NULL;
 SemaphoreHandle_t xSemaphore_hours = NULL;
@@ -138,6 +163,8 @@ void minutes_task (void* pvParameters);
 void hours_task (void* pvParameters);
 void alarm_task (void* pvParameters);
 void print_task (void* pvParameters);
+
+//EventBits_t xEvento;
 
 static void LCD (void *pvParameters);
 
@@ -170,7 +197,9 @@ int main(void) {
 	xTaskCreate(LCD, "Inicializar la LCD", 200, NULL, configMAX_PRIORITIES, NULL);
 	/************************/
 
-	 xTaskCreate(vTask_0, "Initial", (configMINIMAL_STACK_SIZE*2), NULL, (configMAX_PRIORITIES-2), NULL);
+	 xTaskCreate(vTask_0, "Initial", (configMINIMAL_STACK_SIZE*2), NULL, 3, NULL);
+
+	 xTaskCreate(print_task, "Init LCD", 400, NULL, 3, NULL);
 
 	 xTaskCreate(taskLCDChar, "Send Char", 400, NULL, 2, NULL);
 
@@ -214,24 +243,22 @@ void vTask_0 (void* pvParameters)
 	time_handler_t xSemaphore_time = {xSemaphore_minutes, SPImailbox};
 	for(;;)
 	{
-		xTaskCreate(seconds_task, "Seconds", (configMINIMAL_STACK_SIZE*3), NULL, 3, NULL);
-		xTaskCreate(minutes_task, "minutos", (configMINIMAL_STACK_SIZE*3), (void*)&xSemaphore_minutes, 3, NULL);
-		xTaskCreate(hours_task, "horas", (configMINIMAL_STACK_SIZE*3), (void*)&xSemaphore_time, 3, NULL);
-		xTaskCreate(alarm_task, "alarma", (configMINIMAL_STACK_SIZE*3), (void*)&SPImailbox, 3, NULL);
-		xTaskCreate(print_task, "Init LCD", 400, NULL, 3, NULL);
-
-		vTaskDelay(portMAX_DELAY);
+	xTaskCreate(seconds_task, "Seconds", 255, NULL, 3, NULL);
+	xTaskCreate(minutes_task, "minutos", 255, (void*)&xSemaphore_minutes, 3, NULL);
+	xTaskCreate(hours_task, "horas", 255, (void*)&xSemaphore_time, 3, NULL);
+	xTaskCreate(alarm_task, "alarma", 255, (void*)&SPImailbox, 3, NULL);
 	}
 }
 
 
 void seconds_task (void* pvParameters)
 {
+	uint8_t alarm_seconds = alarm_sec;
 	QueueHandle_t SPImailbox = *((QueueHandle_t*)pvParameters);
 	TickType_t xLastWakeTime;
 	BaseType_t xWasDelayed;
 	uint8_t* pmsg;
-	uint8_t seconds;
+	uint8_t seconds = init_sec;
 
 	for(;;)
 	{
@@ -246,8 +273,16 @@ void seconds_task (void* pvParameters)
 			xSemaphoreGiveFromISR(xSemaphore_minutes, NULL);
 		}
 
+		if(seconds == alarm_seconds)
+		{
+			xEventGroupSetBits(xEventGroup, bit_sec);
+		}else
+		{
+			xEventGroupClearBits(xEventGroup, bit_sec);
+		}
+
+
 		xSemaphoreTake(xMutex, portMAX_DELAY);
-		// value = ADC_getValues();
 		xSemaphoreGive(xMutex);
 		*pmsg = seconds;
 		xQueueSend(SPImailbox, &pmsg, portMAX_DELAY);
@@ -257,9 +292,10 @@ void seconds_task (void* pvParameters)
 
 void minutes_task (void* pvParameters)
 {
+	uint8_t alarm_minutes = alarm_min;
 	QueueHandle_t SPImailbox = *((QueueHandle_t*)pvParameters);
 	uint8_t* pmsg;
-	uint8_t minutes;
+	uint8_t minutes = init_min;
 
 			if(xSemaphoreTake(xSemaphore_minutes,portMAX_DELAY) == pdTRUE)
 			{
@@ -274,6 +310,14 @@ void minutes_task (void* pvParameters)
 				}
 			}
 
+			if(minutes == alarm_minutes)
+			{
+				xEventGroupSetBits(xEventGroup, bit_min);
+			}else
+			{
+				xEventGroupClearBits(xEventGroup, bit_min);
+			}
+
 		xSemaphoreTake(xMutex, portMAX_DELAY);
 		// value = ADC_getValues();
 		xSemaphoreGive(xMutex);
@@ -283,9 +327,10 @@ void minutes_task (void* pvParameters)
 
 void hours_task (void* pvParameters)
 {
+	uint8_t alarm_hours = alarm_hour;
 	QueueHandle_t SPImailbox = *((QueueHandle_t*)pvParameters);
 	uint8_t* pmsg;
-	uint8_t hours;
+	uint8_t hours = init_hour;
 
 			if(xSemaphoreTake(xSemaphore_hours,portMAX_DELAY) == pdTRUE)
 			{
@@ -297,6 +342,14 @@ void hours_task (void* pvParameters)
 				{
 					hours = 0;
 				}
+			}
+
+			if(hours == alarm_hours)
+			{
+				xEventGroupSetBits(xEvento, bit_hour);
+			}else
+			{
+				xEventGroupClearBits(xEvento, bit_hour);
 			}
 
 		xSemaphoreTake(xMutex, portMAX_DELAY);
