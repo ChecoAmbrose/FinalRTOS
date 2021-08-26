@@ -1,0 +1,5 @@
+nokiaLCD-bm.c:59:6:delay	24	static
+nokiaLCD-bm.c:68:6:taskLCDInit	16	static
+nokiaLCD-bm.c:80:6:taskLCDChar	24	static
+nokiaLCD-bm.c:103:6:taskLCDImg	16	static
+nokiaLCD-bm.c:120:5:main	16	static

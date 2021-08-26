@@ -1,0 +1,8 @@
+core_cm4.h:1809:22:__NVIC_SetPriority	16	static
+fsl_clock.h:668:20:CLOCK_EnableClock	24	static
+fsl_port.h:374:20:PORT_SetPinMux	24	static
+freertos_spi.c:22:21:freertos_spi_init	72	static
+freertos_spi.c:94:21:freertos_spi_transfer	48	static
+freertos_spi.c:118:13:fsl_spi_callback	32	static
+freertos_spi.c:134:27:freertos_spi_get_port_base	24	static
+freertos_spi.c:160:26:freertos_spi_get_spi_base	24	static
