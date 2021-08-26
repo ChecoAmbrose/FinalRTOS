@@ -5,13 +5,14 @@
 #include "clock_config.h"
 #include "MK64F12.h"
 #include "fsl_debug_console.h"
+
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
+#include "nokiaLCD.h"
 #include "freertos_spi.h"
-#include "fsl_port.h"
-#include "fsl_dspi.h"
+
 
 //  Inicio
 const uint8_t cinves_Bitmap[] = {
@@ -99,7 +100,7 @@ typedef struct
 typedef struct
 {
   uint8_t is_init;
-  dspi_master_handle_t fsl_spi_handle;
+  //dspi_master_handle_t fsl_spi_handle; Esta variable no la necesitas
   SemaphoreHandle_t mutex_rx;
   SemaphoreHandle_t mutex_tx;
   SemaphoreHandle_t rx_sem;
@@ -138,6 +139,8 @@ void hours_task (void* pvParameters);
 void alarm_task (void* pvParameters);
 void print_task (void* pvParameters);
 
+static void LCD (void *pvParameters);
+
 int main(void) {
     /* Init board hardware. */
     BOARD_InitBootPins();
@@ -148,14 +151,14 @@ int main(void) {
     BOARD_InitDebugConsole();
 #endif
 
-    nokiaLCD_initialise();
+   // nokiaLCD_initialise(); Esta función no sirve aqui , te va a causar un Hard fault
 
     PRINTF("Hello World\n");
-		nokiaLCD_updateDisplay();
+	/*	nokiaLCD_updateDisplay();
 		delay(2000);
 		nokiaLCD_clearDisplay(0);
 		delay(2000);
-
+    */ // Como no esta inicializada lo comente
 
     SPImailbox = xQueueCreate(10, sizeof(spi_print_t*));
 		SPImailbox = xQueueCreate(10, sizeof(spi_alarm_t*));
@@ -163,9 +166,11 @@ int main(void) {
 
     vQueueAddToRegistry(SPImailbox, "SPI Queue");
 
-	 xTaskCreate(vTask_0, "Initial", (configMINIMAL_STACK_SIZE*2), NULL, 3, NULL);
+    /*** Tarea de prueba ****/
+	xTaskCreate(LCD, "Inicializar la LCD", 200, NULL, configMAX_PRIORITIES, NULL);
+	/************************/
 
-	 xTaskCreate(print_task, "Init LCD", 400, NULL, 3, NULL);
+	 xTaskCreate(vTask_0, "Initial", (configMINIMAL_STACK_SIZE*2), NULL, (configMAX_PRIORITIES-2), NULL);
 
 	 xTaskCreate(taskLCDChar, "Send Char", 400, NULL, 2, NULL);
 
@@ -185,15 +190,35 @@ int main(void) {
    	 return 0 ;
 }
 
+static void LCD (void *pvParameters){
+
+	char string[] = "Hola en LCD";
+	for(;;){
+
+		nokiaLCD_initialise();
+
+		nokiaLCD_clearDisplay(0);
+
+		nokiaLCD_setStr(string, 0, 0, 1);
+
+		nokiaLCD_updateDisplay();
+
+
+		vTaskSuspend(NULL);
+	}
+}
+
+
 void vTask_0 (void* pvParameters)
 {
 	time_handler_t xSemaphore_time = {xSemaphore_minutes, SPImailbox};
 	for(;;)
 	{
-		xTaskCreate(seconds_task, "Seconds", 255, NULL, 3, NULL);
-		xTaskCreate(minutes_task, "minutos", 255, (void*)&xSemaphore_minutes, 3, NULL);
-		xTaskCreate(hours_task, "horas", 255, (void*)&xSemaphore_time, 3, NULL);
-		xTaskCreate(alarm_task, "alarma", 255, (void*)&SPImailbox, 3, NULL);
+		xTaskCreate(seconds_task, "Seconds", (configMINIMAL_STACK_SIZE*3), NULL, 3, NULL);
+		xTaskCreate(minutes_task, "minutos", (configMINIMAL_STACK_SIZE*3), (void*)&xSemaphore_minutes, 3, NULL);
+		xTaskCreate(hours_task, "horas", (configMINIMAL_STACK_SIZE*3), (void*)&xSemaphore_time, 3, NULL);
+		xTaskCreate(alarm_task, "alarma", (configMINIMAL_STACK_SIZE*3), (void*)&SPImailbox, 3, NULL);
+		xTaskCreate(print_task, "Init LCD", 400, NULL, 3, NULL);
 
 		vTaskDelay(portMAX_DELAY);
 	}
