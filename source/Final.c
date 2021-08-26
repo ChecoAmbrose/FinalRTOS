@@ -5,7 +5,6 @@
 #include "clock_config.h"
 #include "MK64F12.h"
 #include "fsl_debug_console.h"
-
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
@@ -164,7 +163,9 @@ int main(void) {
 
     vQueueAddToRegistry(SPImailbox, "SPI Queue");
 
-	 xTaskCreate(vTask_0, "Initial", (configMINIMAL_STACK_SIZE*2), NULL, (configMAX_PRIORITIES-2), NULL);
+	 xTaskCreate(vTask_0, "Initial", (configMINIMAL_STACK_SIZE*2), NULL, 3, NULL);
+
+	 xTaskCreate(print_task, "Init LCD", 400, NULL, 3, NULL);
 
 	 xTaskCreate(taskLCDChar, "Send Char", 400, NULL, 2, NULL);
 
@@ -189,11 +190,10 @@ void vTask_0 (void* pvParameters)
 	time_handler_t xSemaphore_time = {xSemaphore_minutes, SPImailbox};
 	for(;;)
 	{
-		xTaskCreate(seconds_task, "Seconds", (configMINIMAL_STACK_SIZE*3), NULL, 3, NULL);
-		xTaskCreate(minutes_task, "minutos", (configMINIMAL_STACK_SIZE*3), (void*)&xSemaphore_minutes, 3, NULL);
-		xTaskCreate(hours_task, "horas", (configMINIMAL_STACK_SIZE*3), (void*)&xSemaphore_time, 3, NULL);
-		xTaskCreate(alarm_task, "alarma", (configMINIMAL_STACK_SIZE*3), (void*)&SPImailbox, 3, NULL);
-		xTaskCreate(print_task, "Init LCD", 400, NULL, 3, NULL);
+		xTaskCreate(seconds_task, "Seconds", 255, NULL, 3, NULL);
+		xTaskCreate(minutes_task, "minutos", 255, (void*)&xSemaphore_minutes, 3, NULL);
+		xTaskCreate(hours_task, "horas", 255, (void*)&xSemaphore_time, 3, NULL);
+		xTaskCreate(alarm_task, "alarma", 255, (void*)&SPImailbox, 3, NULL);
 
 		vTaskDelay(portMAX_DELAY);
 	}
